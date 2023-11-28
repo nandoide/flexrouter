@@ -1,11 +1,10 @@
 const DEBUG = true;
 NeedsTimingInfo = true;
-const cc_values4pad = [30, 31, 32, 33]
+const cc_values4pad = [30, 31, 32, 33, 34, 35, 36, 37]
 const pitchs4pad = [36, 38, 40]; //bindings for the four rows of scaler pad
 const modulations4pad = [0, 32, 54]; //first four modulations4pad of the logic onscreen midi keyboard
 const pitchs4perform = [24, 26, 28]
 const modulations4perform = [76, 98, 127]
-const pitchs_scaler_perform_row_bindings = [24, 26, 28, 29, 31, 33, 35, 37];
 const scales_CC_root = ["", "50", "60", "70", "80"];
 const perform_CC_root = ["", "90", "100", "110", "120"];
 const intervals = "2212221" // major
@@ -90,16 +89,20 @@ function HandleMIDI(event) {
         event.send();
     } else if ((event instanceof NoteOn || event instanceof NoteOff) && event.pitch < 24) {
         // don't send keyswitches kontakt zone (C-2, C-1) to scaler
-			    } else if (event instanceof ControlChange && cc_values4pad.indexOf(event.number) > -1 && scaler_pad_bank <= 1) {
+	} else if (event instanceof ControlChange && cc_values4pad.indexOf(event.number) > -1 && scaler_pad_bank <= 1) {
         let index = cc_values4pad.indexOf(event.number) + scaler_pad_bank * 4;
         // send CC control for the scale of the pad row
         send_scaler_cc(index, root_pad_CC);
         // send keyswitch for row pad
-        var off = send_scaler_keyswitch(index);
+        send_scaler_keyswitch(index);
     } else if (event instanceof ControlChange && cc_values4pad.indexOf(event.number) > -1 && scaler_pad_bank <= 3) {
         //performances
         let index = cc_values4pad.indexOf(event.number) + (scaler_pad_bank - 2) * 4;
         send_scaler_cc(index, root_perform_CC);
+    } else if (event instanceof NoteOn && scaler_pad_binds.indexOf(event.pitch) > -1) {
+        let index = scaler_pad_binds.indexOf(event.pitch);
+        // send CC control to set the scale related to the pad row
+        send_scaler_cc(index, root_pad_CC);
     } else {
         if (DEBUG) Trace("Not intercepted");
         if (DEBUG) event.trace();
