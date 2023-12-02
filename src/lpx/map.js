@@ -13,8 +13,8 @@ const notes_range_ini = 57; //A2
 const octave_up = 56;
 const octaves = 2;
 const scaler_pad_binds = [36, 38, 40, 41, 43, 45, 47, 47];
-const scaler_perform_binds_bank0 = [24, 26, 28, 29]; //8 performance alternatives from C0
-const scaler_perform_binds_bank1 = [31, 33, 35, 37];
+const scaler_perf_binds = [24, 26, 28, 29, 31];
+const instrument_change = 33;
 let scale = 'major';
 let root = 60; //C3
 let octave = 0;
@@ -74,6 +74,13 @@ function HandleMIDI(event) {
         if (DEBUG) Trace(octave);
         event.velocity = 0;
         event.send();
+    } else if (event instanceof NoteOn && event.pitch == instrument_change) {
+        let cc_number = 60;
+        Trace("cc_number " + cc_number);
+        let cc = new ControlChange;
+        cc.number = cc_number;
+        cc.value = event.velocity;
+        cc.send();
     } else if ((event instanceof NoteOn || event instanceof NoteOff) && event.pitch >= notes_range_ini) {
         //Modify pitch to white key from C3
         Trace('Displace octave', event.pitch);
@@ -87,7 +94,7 @@ function HandleMIDI(event) {
         event.pitch = pitch;
         if (DEBUG) event.trace();
         event.send();
-    } else if ((event instanceof NoteOn || event instanceof NoteOff) && event.pitch < 24) {
+    //} else if ((event instanceof NoteOn || event instanceof NoteOff) && event.pitch < 24) {
         // don't send keyswitches kontakt zone (C-2, C-1) to scaler
 	} else if (event instanceof ControlChange && cc_values4pad.indexOf(event.number) > -1 && scaler_pad_bank <= 1) {
         let index = cc_values4pad.indexOf(event.number) + scaler_pad_bank * 4;
@@ -102,7 +109,13 @@ function HandleMIDI(event) {
     } else if (event instanceof NoteOn && scaler_pad_binds.indexOf(event.pitch) > -1) {
         let index = scaler_pad_binds.indexOf(event.pitch);
         // send CC control to set the scale related to the pad row
+        event.send();
         send_scaler_cc(index, root_pad_CC);
+    } else if (event instanceof NoteOn && scaler_perf_binds.indexOf(event.pitch) > -1) {
+        let index = scaler_perf_binds.indexOf(event.pitch);
+        // send CC control to set the scale related to the pad row
+        // event.send();
+        send_scaler_cc(index, root_perform_CC);
     } else {
         if (DEBUG) Trace("Not intercepted");
         if (DEBUG) event.trace();

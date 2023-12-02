@@ -1,0 +1,109 @@
+{------------------------------------------------------------------------------------
+Title: 4-way Chord Splitter
+
+Author: R.D.Villwock aka 'Big Bob'
+
+First Written: October 24, 2007
+
+Current Version: 1.00
+
+Last Modified: October 24, 2007 
+------------------------------------------------------------------------------------}
+on init
+  declare Voices  := 8         { Set to desired voices, maximum of 16 }
+  declare ui_knob Part (1,Voices,1) { Selects the 'Part' Number for this script }
+  set_text(Part,'  Part')
+  family Gate  { Time Gate Queue for chord note collection }
+    declare Count    { Notes in gate queue so far }
+    declare Note[Voices] := (-1)  { Note array, -1 means none }
+    declare Parent[Voices]        { Corresponding parent note id }
+    declare Velo[Voices]          { Velocity of parent note }
+    declare ui_knob Time (1,50,1) { Gate Time in milliseconds }
+    set_text(Gate.Time,'  Gate')
+    set_knob_unit(Gate.Time,KNOB_UNIT_MS)
+  end family
+  family Play  { Notes actually playing, after collection time }
+    declare Note[Voices] := (-1)  { Note array, -1 means none }
+    declare Parent[Voices]        { Corresponding Parent note id }
+    declare Child[Voices]         { Generated Child note id }
+  end family
+  declare qx         { General Queue index }
+  declare NoteCount  { Total notes sounding or waiting to sound }
+  make_persistent(Part)
+  make_persistent(Gate.Time)
+  message('')
+end on { init }
+
+on note
+  ignore_event(EVENT_ID)  { Discard original parent note event }
+  if NoteCount >= Voices  { No more than 'Voices' notes at a time }
+    exit
+  end if
+  inc(NoteCount)          { Bump the total note count, Gated and playing }
+  AddNoteToGateQueue      { Add this note to the Gated Queue }
+  if Gate.Count # 1       { If this is not the first in the Gated Queue, we're done }
+    exit
+  end if
+  wait(Gate.Time*1000)    { If this is the first, start the Gate Time }
+  GateToPlay              { When Gate time finishes, sort and Xfr the collected notes }
+  Gate.Count := 0         { Gated Queue is now empty again }
+end on { note }
+
+on release
+  qx := search(Play.Parent,EVENT_ID)  { Is this event in the Play Queue? }
+  if qx # -1                    { Yes }
+    Play.Note[qx] := -1         { Mark this slot as empty in Play queue }
+    dec(NoteCount)              { Reduce total note count }
+    if qx = Part - 1            { If this note was played by this Part script, }
+      note_off(Play.Child[qx])  {  end the note }
+    end if
+    exit
+  end if  { If we get here, release event is not in the Play queue }
+  qx := search(Gate.Parent,EVENT_ID)  { See if it's in the Gated Queue }
+  if qx # -1              { Yes, it is }
+    Gate.Note[qx] := -1   { Mark it as empty in the Gate Queue }
+    dec(NoteCount)        { Reduce total note count and Gate Note count }
+    dec(Gate.Count)
+  end if
+end on { release }
+
+function AddNoteToGateQueue  { Add new note to Gate queue }
+
+  declare gx
+
+  
+
+  gx := search(Gate.Note,-1)       { Next unused Gate.Note slot }
+  Gate.Note[gx] := sh_left(EVENT_NOTE,4) + gx  { Pack Index with it }
+
+  Gate.Parent[gx] := EVENT_ID      { Corresponding Parent note id }
+
+  Gate.Velo[gx] := EVENT_VELOCITY  { Corresponding Velocity }
+
+  inc(Gate.Count)
+
+end function { AddNoteToGateQueue }
+
+function GateToPlay { Sort the Gate Queue and transfer notes to the Play Queue }
+  declare n   { Loop index }
+  declare pid { Corresponding Parent id }
+  declare vel { Velocity of current note }
+  
+  sort(Gate.Note,0)  { Sort the Gate notes in ascending order, along with index tags }
+  for n := 0 to Voices - 1           { Sequence through the Gate.Note array }
+    if Gate.Note[n] # -1             { If this slot is not empty }
+      qx := Gate.Note[n] .and. 0xF   { Unpack parent id index from Gate.Note }
+      Gate.Note[n] := sh_right(Gate.Note[n],4)  { Get rid of index }
+      pid := Gate.Parent[qx]         { Corresponding Parent ID }
+      vel := Gate.Velo[qx]           { Corresponding Velocity }
+      qx := search(Play.Note,-1)     { Find first unused Play.Note slot }
+      Play.Note[qx] := Gate.Note[n]  { Copy Gate.Note to Play.Note queue }
+      Gate.Note[n] := -1             { Empty this Gate.Note slot }
+      Play.Parent[qx] := pid         { Copy corresponding Parent ID }
+      if qx = Part - 1 { Play this note if this is the 'Part' script }
+        Play.Child[qx] := play_note(Play.Note[qx],vel,0,0) 
+      end if
+    end if
+  end for
+end function { GateToPlay }
+
