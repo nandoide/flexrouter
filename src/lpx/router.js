@@ -1,6 +1,6 @@
 const DEBUG = true;
 NeedsTimingInfo = true;
-const scaler_velocity_chordpad_row = 11;
+const scaler_chordpad_row = 11;
 const scaler_cc_chordpad_row = 40;
 const scaler_cc_chordpad_scale = 50;
 const scaler_cc_chordpad_limit = 7;
@@ -12,8 +12,14 @@ const intervals = "2212221" // major scale
 const notes_range_ini = 21; //A-1, firs white after 8 chords in scaler
 const root = 24; // C0
 const octave_up = 20; // octave up from 0 to octaves - 1
-const octaves = [1,2,3]; // octaves up and down
+const octaves = [0,1,2,3,4]; // octaves up and down
 let octave = 0; // octave index in octaves
+
+const modulations4pad = [0, 32, 54]; //first three modulation of the logic onscreen midi keyboard
+const modulations4perform = [76, 98, 127];//second three modulations of the logic onscreen midi keyboard
+
+const instrument = 8;
+const cc_instrument = 88;
 
 function send_cc(index, root_cc) {
     Trace("Send CC");
@@ -30,22 +36,48 @@ function send_cc(index, root_cc) {
     }
 }
 
+function send_cc_with_value(cc_number, value) {
+    Trace("Send CC with value " + cc_number + " " + value);
+    let cc = new ControlChange;
+    cc.number = cc_number;
+    cc.value = value;
+    cc.send();
+}
+
+function send_note(pitch, velocity) {
+    Trace("Send Note " + pitch + " " + velocity);
+    let on = new NoteOn;
+    on.pitch = pitch;
+    on.velocity = velocity;
+    on.send();
+    let off = new NoteOff(on);
+    off.sendAfterBeats(1);
+}
+
+function send_scaler_chorpad(pitch, velocity) {
+    if(DEBUG) Trace('Row selection for chord pad in scaler ' + pitch + ' ' + velocity);
+    velocity -= 1; //logic piano roll velocity is 1-127
+    if (velocity > scaler_cc_chordpad_limit) {
+        velocity = scaler_cc_chordpad_limit;
+    }
+    send_cc(velocity, scaler_cc_chordpad_row);
+    send_cc(velocity, scaler_cc_chordpad_scale);
+}
+
+function send_scaler_performance(pitch, velocity) {
+    if(DEBUG) Trace('Row selection for performance in scaler ' + pitch + ' ' + velocity);
+    velocity -= 1; //logic piano roll velocity is 1-127
+    if (velocity > scaler_cc_performance_limit) {
+        velocity = scaler_cc_performance_limit;
+    }
+    send_cc(velocity, scaler_cc_performance);
+}
+
 function HandleMIDI(event) {
-    if (event instanceof NoteOn && event.pitch == scaler_velocity_chordpad_row) {
-        Trace('Row selection for chord pad in scaler', event.pitch, event.velocity);
-        event.velocity -= 1; //logic piano roll velocity is 1-127
-        if (event.velocity > scaler_cc_chordpad_limit) {
-            event.velocity = scaler_cc_chordpad_limit;
-        }
-        send_cc(event.velocity, scaler_cc_chordpad_row);
-        send_cc(event.velocity, scaler_cc_chordpad_scale);
+    if (event instanceof NoteOn && event.pitch == scaler_chordpad_row) {
+        send_scaler_chorpad(event.pitch, event.velocity);
     } else if (event instanceof NoteOn && event.pitch == scaler_performance) {
-        Trace('Row selection for performance in scaler', event.pitch , event.velocity);
-        event.velocity -= 1; //logic piano roll velocity is 1-127
-        if (event.velocity > scaler_cc_performance_limit) {
-            event.velocity = scaler_cc_performance_limit;
-        }
-        send_cc(event.velocity, scaler_cc_performance);
+        send_scaler_performance(event.pitch, event.velocity);
     } else if (event instanceof NoteOn && event.pitch == octave_up) {
         if (DEBUG) Trace("Octave change")
         if (DEBUG) Trace(octave);
@@ -64,6 +96,25 @@ function HandleMIDI(event) {
         event.pitch = pitch;
         if (DEBUG) event.trace();
         event.send();
+    } else if (event instanceof ControlChange && event.number == 1) {
+        //For screen keyboard in logic pro
+        //Create a note on and off event for every modulation mapped to control keys in scaler
+        if (DEBUG) Trace("Toggle bank of scaler pad rows");
+        if (DEBUG) event.trace();
+        if (DEBUG) Trace(event.value);
+        let index = modulations4pad.indexOf(event.value);
+        if (index > -1) {
+            send_note(scaler_chordpad_row, index + 1);
+            send_scaler_chorpad(scaler_chordpad_row, index + 1);
+        } else {
+            index = modulations4perform.indexOf(event.value);
+            if (index > -1) {
+                send_note(scaler_performance, index + 1);
+                send_scaler_performance(scaler_performance, index + 1);   
+            }
+        }
+    } else if (event instanceof Note && event.pitch == instrument) {
+        send_cc_with_value(cc_instrument, event.velocity - 1);
     } else {
         if (DEBUG) Trace("Not intercepted");
         if (DEBUG) event.trace();
