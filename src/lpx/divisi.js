@@ -1,186 +1,97 @@
-// Repeats note that is played with specified beat divisions
-
+const DEBUG = true;
 var NeedsTimingInfo = true;
-// load active notes with notes that start in the same interval (50ms) as the first note
-var activeNotes = [];
-var startTime = 0;
-var note_time = 0;
-var LAPSE = 0.05;
 
-function HandleMIDI(event) {
-	if (event instanceof NoteOn) {
-        if (startTime == 0) {
-            startTime = event.beat;
-            activeNotes.push(event);
-        } else {
-            note_time = event.beat - startTime;
-            if (note_time < LAPSE) {
-                activeNotes.push(event);
+const activeNotes = {
+    maxFlush: 20,
+    b: [],
+    sended: [],
+    add: function (event) { this.b.push(event) },
+    sortByPitchAscending: function (a, b) {
+        if (a.pitch < b.pitch) {
+            return -1;
+        }
+        if (a.pitch > b.pitch) {
+            return 1;
+        }
+        return 0;
+    },
+    divisi: function (channel) {
+        let c = [];
+        let divisi_notes = [];
+        // copy b in c
+        let k = Math.min(this.maxFlush, this.b.length);
+        for (let i = 0; i < k; i++) {
+            c[i] = this.b[i];
+        }
+        // get the group of notes that start in the same interval (50ms)
+        startTime = 0;
+        note_time = 0;
+        LAPSE = 0.05;
+        for (let i = 0; i < c.length; i++) {
+            if (startTime == 0) {
+                startTime = c[i].beatPos;
+                divisi_notes.push(c[i]);
             } else {
-                activeNotes = [];
-                startTime = event.beat;
-                activeNotes.push(event);
+                note_time = c[i].beatPos - startTime;
+                if (note_time < LAPSE) {
+                    divisi_notes.push(c[i]);
+                } else {
+                    divisi_notes = [];
+                    startTime = c[i].beatPos;
+                    divisi_notes.push(c[i]);
+                }
             }
-        }  
-	}
-	else if (event instanceof NoteOff) {
-		// remove note from array
-		for (i = 0; i < activeNotes.length; i++) {
-			if (activeNotes[i].pitch == event.pitch) {
-				activeNotes.splice(i, 1);
-				break;
-			}
-		}
-	}
-	// pass non-note events through
-	else event.send();
-
-	// sort array of active notes
-	activeNotes.sort(sortByPitchAscending);
-}
-
-//-----------------------------------------------------------------------------
-function sortByPitchAscending (a, b) {
-	if (a.pitch < b.pitch) {
-    return -1;
-  }
-	if (a.pitch > b.pitch) {
-    return 1;
-  }
-	return 0;
-}
-
-//-----------------------------------------------------------------------------
-var wasPlaying = false;
+        }
+        // if (divisi_notes.length > 1) Trace(JSON.stringify(divisi_notes));
+        // sort divisi_notes by pitch ascending
+        divisi_notes.sort(this.sortByPitchAscending);
+        // rechannel divisi_notes, starting from channel 2 (channel 1 is the original one) 
+        // if (divisi_notes.length > 1) Trace(JSON.stringify(divisi_notes));
+        for (let i = 0; i < divisi_notes.length; i++) {
+            divisi_notes[i].channel = i + 2;
+        }
+        //     if (divisi_notes.length > 1) Trace(JSON.stringify(divisi_notes));
+        // substitute divisi_notes in b
+        for (let i = 0; i < divisi_notes.length; i++) {
+            for (let j = 0; j < this.b.length; j++) {
+                if (this.b[j].pitch == divisi_notes[i].pitch) {
+                    this.b[j] = divisi_notes[i];
+                    break;
+                }
+            }
+        }
+       
+    },
+    send: function () {
+        let i = 0;
+        while (i <= this.maxFlush && this.b.length > 0) {
+            let event = this.b.shift();
+            Trace(JSON.stringify(event));
+            event.send();
+            this.sended.push(event);
+            i++;
+        }
+    }
+};
 
 function ProcessMIDI() {
-	// Get timing information from the host application
-	var musicInfo = GetTimingInfo();
+    activeNotes.divisi();
+    activeNotes.send();
+}
 
-	// clear activeNotes[] when the transport stops and send any remaining note off events
-	if (wasPlaying && !musicInfo.playing) {
-		for(i = 0;i < activeNotes.length; i++) {
-			var off = new NoteOff(activeNotes[i]);
-			off.send();
-		}
-	}
-
-	wasPlaying = musicInfo.playing;
-
-	if (activeNotes.length != 0) {
-
-        var state = GetParameter("Reset");
-        if (state == 1) {
-            Reset();
+function HandleMIDI(event) {
+    if (event instanceof NoteOn) {
+        activeNotes.add(event);
+    } else if (event instanceof NoteOff) {
+        for (i = 0; i < activeNotes.sended.length; i++) {
+            if (activeNotes.sended[i].pitch == event.pitch) {
+                event.channel = activeNotes.sended[i].channel;
+                activeNotes.sended.splice(i, 1);
+                break;
+            }
         }
-
-			var chosenNote = chooseNote(noteOrder, step);
-
-			// send events
-			var noteOn = new NoteOn(chosenNote);
-			// noteOn.pitch = MIDI.normalizeData(noteOn.pitch + randomOctave);
-			noteOn.pitch = MIDI.normalizeData(noteOn.pitch);
-			// noteOn.sendAtBeat(nextBeat + randomDelay);
-			noteOn.sendAtBeat(nextBeat);
-			var noteOff = new NoteOff(noteOn);
-			// noteOff.sendAtBeat(nextBeat + randomDelay + noteLength + randomLength);
-			noteOff.sendAtBeat(nextBeat + noteLength);
-
-			// advance to next beat
-			nextBeat += 0.001;
-			nextBeat = Math.ceil(nextBeat * division) / division;
-		}
-	}
+        event.send();
+    } else {
+        event.send();
+    }
 }
-
-function Reset() {
-  NeedsTimingInfo = true;
-  activeNotes = [];
-  SetParameter ("Reset", 0);
-}
-
-//-----------------------------------------------------------------------------
-var noteOrders = ["up", "down", "random"];
-
-function chooseNote(noteOrder, step) {
-	var order = noteOrders[noteOrder];
-	var length = activeNotes.length
-	if (order == "up") return activeNotes[step % length];
-	if (order == "down") return activeNotes[Math.abs(step % length - (length - 1))];
-	if (order == "random") return activeNotes[Math.floor(Math.random() * length)];
-	else return 0;
-}
-
-//-----------------------------------------------------------------------------
-// var PluginParameters =
-// [
-// 		{name:"Beat Division", type:"linear",
-// 		minValue:1, maxValue:16, numberOfSteps:15, defaultValue:1},
-//
-// 		{name:"Note Order", type:"menu", valueStrings:noteOrders,
-// 		minValue:0, maxValue:2, numberOfSteps: 3, defaultValue:0},
-//
-// 		{name:"Note Length", unit:"%", type:"linear",
-// 		minValue:1, maxValue:200, defaultValue:100.0, numberOfSteps:199},
-//
-// 		{name:"Random Length", unit:"%", type:"linear",
-// 		minValue:0, maxValue:200, numberOfSteps: 200, defaultValue:0},
-//
-// 		{name:"Random Delay", unit:"%", type:"linear",
-// 		minValue:0, maxValue:200, numberOfSteps:200, defaultValue:0},
-//
-// 		{name:"Random Octave", type:"linear",
-// 		minValue:1, maxValue:4, defaultValue:1, numberOfSteps:3}
-// ];
-var PluginParameters =
-[
-		{name:"Beat Division", type:"linear",
-		minValue:1, maxValue:16, numberOfSteps:15, defaultValue:1},
-
-		{name:"Note Order", type:"menu", valueStrings:noteOrders,
-		minValue:0, maxValue:2, numberOfSteps: 3, defaultValue:0},
-
-		{name:"Reset", type:"menu", valueStrings:["Off", "On"],
-		minValue:0, maxValue:1, numberOfSteps: 2, defaultValue:0},
-
-		{name:"Note Length", unit:"%", type:"linear",
-		minValue:1, maxValue:200, defaultValue:100.0, numberOfSteps:199}
-];
-
-// ----------------------------------------------------------------------------
-// Code from plugin.js
-
-// Copy and paste this chunk of code into your script editor to create controls in your plugin
-
-// var PluginParameters = [];
-
-// Types of Plugin Parameters
-const LINEAR_FADER = "lin";
-const LOGARITHMIC_FADER = "log";
-const MOMENTARY_BUTTON = "momentary";
-const MENU = "menu";
-const NOT_NEEDED = "";
-
-/*
-To create a plugin parameter (a fader or knob that changes something is a basic way of desribing it), call the createPluginParameter function as follows:
-createPluginParameter("Enter a name in quotes", Enter a type from above in quotes (for example: LINEAR_FADER), Enter a minimum value, Enter a maximum value, Enter a default value, enter the number of steps, "Enter a unit in quotes", "Enter text to create a divider/header in the plug-in", Enter a list of value strings if you are creating a menu as follows: ["something", "something", "something"]);
-*/
-
-function createPluginParameter (name, type, minValue, maxValue, defaultValue, numberOfSteps, unit, text, valueStrings) {
-  if (type == MENU) {
-    PluginParameters.push (createMenuPluginParameter (name, type, minValue, maxValue, defaultValue, numberOfSteps, unit, text, valueStrings));
-  }
-  else {
-    PluginParameters.push (createBasicPluginParameter (name, type, minValue, maxValue, defaultValue, numberOfSteps, unit, text));
-  }
-}
-
-function createBasicPluginParameter (name, type, minValue, maxValue, defaultValue, numberOfSteps, unit, text) {
-  return {name: name, type: type, minValue: minValue, maxValue: maxValue, numberOfSteps: numberOfSteps, unit: unit, text: text};
-}
-
-function createMenuPluginParameter (name, type, minValue, maxValue, defaultValue, numberOfSteps, unit, text, valueStrings) {
-  return {name: name, type: type, minValue: minValue, maxValue: maxValue, numberOfSteps: numberOfSteps, unit: unit, text: text, valueStrings: valueStrings};
-}
-
-//Parameters for the plugin
