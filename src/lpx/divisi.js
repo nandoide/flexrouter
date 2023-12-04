@@ -1,5 +1,7 @@
 const DEBUG = true;
 var NeedsTimingInfo = true;
+const DIVISI_CHANNEL_START = 2;
+const DIVISI_CHANNEL_MONO = 8;
 
 const activeNotes = {
     maxFlush: 20,
@@ -47,10 +49,13 @@ const activeNotes = {
         divisi_notes.sort(this.sortByPitchAscending);
         // rechannel divisi_notes, starting from channel 2 (channel 1 is the original one) 
         // if (divisi_notes.length > 1) Trace(JSON.stringify(divisi_notes));
-        for (let i = 0; i < divisi_notes.length; i++) {
-            divisi_notes[i].channel = i + 2;
+        if (divisi_notes.length > 1) {
+            for (let i = 0; i < divisi_notes.length; i++) {
+                divisi_notes[i].channel = i + DIVISI_CHANNEL_START;
+            }
+        } else if (divisi_notes.length == 1) {
+            divisi_notes[0].channel = DIVISI_CHANNEL_MONO;
         }
-        //     if (divisi_notes.length > 1) Trace(JSON.stringify(divisi_notes));
         // substitute divisi_notes in b
         for (let i = 0; i < divisi_notes.length; i++) {
             for (let j = 0; j < this.b.length; j++) {
