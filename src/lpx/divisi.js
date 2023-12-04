@@ -2,9 +2,25 @@ const DEBUG = true;
 var NeedsTimingInfo = true;
 const DIVISI_CHANNEL_START = 2;
 const DIVISI_CHANNEL_MONO = 8;
+const LAPSE = 0.05;
+let lastTime = new Date().getTime();
+let lastTime_idle = null;
+
+const console = {
+    maxFlush: 20,
+    b: [],
+    log: function (msg) { this.b.push(msg) },
+    flush: function () {
+        var i = 0;
+        while (i <= this.maxFlush && this.b.length > 0) {
+            Trace(this.b.shift());
+            i++;
+        }
+    }
+};
 
 const activeNotes = {
-    maxFlush: 20,
+    maxFlush: 100,
     b: [],
     sended: [],
     add: function (event) { this.b.push(event) },
@@ -17,6 +33,27 @@ const activeNotes = {
         }
         return 0;
     },
+    rechannel: function (divisi_notes) {
+        // sort divisi_notes by pitch ascending
+        divisi_notes.sort(this.sortByPitchAscending);
+        if (divisi_notes.length > 1) {
+            for (let i = 0; i < divisi_notes.length; i++) {
+                divisi_notes[i].channel = i + DIVISI_CHANNEL_START;
+            }
+        } else if (divisi_notes.length == 1) {
+            divisi_notes[0].channel = DIVISI_CHANNEL_MONO;
+        }
+        if (divisi_notes.length > 0) console.log(JSON.stringify(divisi_notes));
+        // substitute divisi_notes in b
+        for (let i = 0; i < divisi_notes.length; i++) {
+            for (let j = 0; j < this.b.length; j++) {
+                if (this.b[j].pitch == divisi_notes[i].pitch) {
+                    this.b[j] = divisi_notes[i];
+                    break;
+                }
+            }
+        }
+    },
     divisi: function (channel) {
         let c = [];
         let divisi_notes = [];
@@ -28,7 +65,6 @@ const activeNotes = {
         // get the group of notes that start in the same interval (50ms)
         startTime = 0;
         note_time = 0;
-        LAPSE = 0.05;
         for (let i = 0; i < c.length; i++) {
             if (startTime == 0) {
                 startTime = c[i].beatPos;
@@ -38,40 +74,20 @@ const activeNotes = {
                 if (note_time < LAPSE) {
                     divisi_notes.push(c[i]);
                 } else {
+                    this.rechannel(divisi_notes);
                     divisi_notes = [];
                     startTime = c[i].beatPos;
                     divisi_notes.push(c[i]);
                 }
             }
         }
-        // if (divisi_notes.length > 1) Trace(JSON.stringify(divisi_notes));
-        // sort divisi_notes by pitch ascending
-        divisi_notes.sort(this.sortByPitchAscending);
-        // rechannel divisi_notes, starting from channel 2 (channel 1 is the original one) 
-        // if (divisi_notes.length > 1) Trace(JSON.stringify(divisi_notes));
-        if (divisi_notes.length > 1) {
-            for (let i = 0; i < divisi_notes.length; i++) {
-                divisi_notes[i].channel = i + DIVISI_CHANNEL_START;
-            }
-        } else if (divisi_notes.length == 1) {
-            divisi_notes[0].channel = DIVISI_CHANNEL_MONO;
-        }
-        // substitute divisi_notes in b
-        for (let i = 0; i < divisi_notes.length; i++) {
-            for (let j = 0; j < this.b.length; j++) {
-                if (this.b[j].pitch == divisi_notes[i].pitch) {
-                    this.b[j] = divisi_notes[i];
-                    break;
-                }
-            }
-        }
-       
+        this.rechannel(divisi_notes);
     },
     send: function () {
         let i = 0;
         while (i <= this.maxFlush && this.b.length > 0) {
             let event = this.b.shift();
-            Trace(JSON.stringify(event));
+            //console.log(JSON.stringify(event));
             event.send();
             this.sended.push(event);
             i++;
@@ -79,7 +95,24 @@ const activeNotes = {
     }
 };
 
+console.log("Starting");
+
+function Idle() {
+    const now = new Date().getTime();
+    //if (lastTime_idle) Trace(`Idle ${now - lastTime}ms`);
+    lastTime_idle = now;
+    console.flush();
+}
+
 function ProcessMIDI() {
+    const now = new Date().getTime();
+    let lapse_from_last_execution = now - lastTime;
+    //if (lastTime) Trace(`ProcessMIDI ${lapse_from_last_execution}ms`);
+    /*if (lapse_from_last_execution > 10) {
+        activeNotes.divisi();
+        activeNotes.send();
+        lastTime = now;
+    }*/
     activeNotes.divisi();
     activeNotes.send();
 }
