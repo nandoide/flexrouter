@@ -27,6 +27,12 @@ function HandleMIDI(event) {
     } else if (event instanceof NoteOn) {
         event.articulationID = current_articulation;
         if(DEBUG) console.log(JSON.stringify(event));
+    } else if (event instanceof NoteOff) {
+        // NoteOff to all possible articulations to avoid stuck notes
+        for (let i = 1; i <= 31; i++) {
+            event.articulationID = i;
+            event.send();
+        }
     }
     event.send();
 }
