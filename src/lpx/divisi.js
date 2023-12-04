@@ -108,13 +108,13 @@ function ProcessMIDI() {
     const now = new Date().getTime();
     let lapse_from_last_execution = now - lastTime;
     //if (lastTime) Trace(`ProcessMIDI ${lapse_from_last_execution}ms`);
-    /*if (lapse_from_last_execution > 10) {
+    if (lapse_from_last_execution > LAPSE*1000) {
         activeNotes.divisi();
         activeNotes.send();
         lastTime = now;
-    }*/
-    activeNotes.divisi();
-    activeNotes.send();
+    }
+    // activeNotes.divisi();
+    // activeNotes.send();
 }
 
 function HandleMIDI(event) {
