@@ -5,6 +5,7 @@ const DIVISI_CHANNEL_MONO = 8;
 const LAPSE = 0.05;
 let lastTime = new Date().getTime();
 let lastTime_idle = null;
+let wasPlaying = false;
 
 const console = {
     maxFlush: 20,
@@ -36,14 +37,16 @@ const activeNotes = {
     rechannel: function (divisi_notes) {
         // sort divisi_notes by pitch ascending
         divisi_notes.sort(this.sortByPitchAscending);
-        if (divisi_notes.length > 1) {
+        if (divisi_notes.length > 2) {
             for (let i = 0; i < divisi_notes.length; i++) {
                 divisi_notes[i].channel = i + DIVISI_CHANNEL_START;
             }
         } else if (divisi_notes.length == 1) {
             divisi_notes[0].channel = DIVISI_CHANNEL_MONO;
+        } else if (divisi_notes.length == 2) {
+            divisi_notes[0].channel = DIVISI_CHANNEL_MONO;
         }
-        if (divisi_notes.length > 0) console.log(JSON.stringify(divisi_notes));
+        // if (divisi_notes.length > 0) console.log(JSON.stringify(divisi_notes));
         // substitute divisi_notes in b
         for (let i = 0; i < divisi_notes.length; i++) {
             for (let j = 0; j < this.b.length; j++) {
@@ -92,6 +95,12 @@ const activeNotes = {
             this.sended.push(event);
             i++;
         }
+    },
+    noteoff: function () {
+        for(let i = 0; i < this.sended.length; i++) {
+            let off = new NoteOff(this.sended[i]);
+            off.send();
+        }
     }
 };
 
@@ -105,16 +114,19 @@ function Idle() {
 }
 
 function ProcessMIDI() {
+    // Get timing information from the host application
+	let musicInfo = GetTimingInfo();
+
+	// clear activeNotes[] when the transport stops and send any remaining note off events
+	if (wasPlaying && !musicInfo.playing) {
+		activeNotes.noteoff();
+	}
+	wasPlaying = musicInfo.playing;
     const now = new Date().getTime();
-    let lapse_from_last_execution = now - lastTime;
-    //if (lastTime) Trace(`ProcessMIDI ${lapse_from_last_execution}ms`);
-    if (lapse_from_last_execution > LAPSE*1000) {
-        activeNotes.divisi();
-        activeNotes.send();
-        lastTime = now;
-    }
-    // activeNotes.divisi();
-    // activeNotes.send();
+    // let lapse_from_last_execution = now - lastTime;
+    activeNotes.divisi();
+    activeNotes.send();
+    // lastTime = now;
 }
 
 function HandleMIDI(event) {
