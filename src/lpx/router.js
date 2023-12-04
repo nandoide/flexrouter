@@ -21,6 +21,9 @@ const modulations4perform = [76, 98, 127];//second three modulations of the logi
 const instrument = 8;
 const cc_instrument = 88;
 
+const articulation = 0;
+const cc_articulation = 70;
+
 function send_cc(index, root_cc) {
     Trace("Send CC");
     if (root_cc == undefined) {
@@ -115,6 +118,8 @@ function HandleMIDI(event) {
         }
     } else if (event instanceof Note && event.pitch == instrument) {
         send_cc_with_value(cc_instrument, event.velocity - 1);
+    } else if (event instanceof Note && event.pitch == articulation) {
+        send_cc_with_value(cc_articulation, event.velocity);
     } else {
         if (DEBUG) Trace("Not intercepted");
         if (DEBUG) event.trace();
