@@ -1,7 +1,8 @@
 const DEBUG = true;
 const cc_articulation = 70;
 let current_articulation = 1;
-NeedsTimingInfo = true;
+let activeNotes = [];
+var NeedsTimingInfo = true;
 
 const console = {
     maxFlush: 20,
@@ -26,12 +27,18 @@ function HandleMIDI(event) {
         if(DEBUG) console.log("Articulation " + current_articulation);
     } else if (event instanceof NoteOn) {
         event.articulationID = current_articulation;
+        activeNotes.push(event);
         if(DEBUG) console.log(JSON.stringify(event));
     } else if (event instanceof NoteOff) {
-        // NoteOff to all possible articulations to avoid stuck notes
-        for (let i = 1; i <= 31; i++) {
-            event.articulationID = i;
-            event.send();
+        for (i = 0; i < activeNotes.length; i++) {
+            // if there is an active note on the same pitch and distinct articulation, I need to send a note off with the stored channel and articulation
+            if (activeNotes[i].pitch == event.pitch) {
+                if (event.channel != activeNotes[i].channel) {
+                    event.channel = activeNotes[i].channel;
+                }
+                activeNotes.splice(i, 1);
+                break;
+            }
         }
     }
     event.send();
