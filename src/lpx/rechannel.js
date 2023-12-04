@@ -29,17 +29,27 @@ function send_cc(cc_number, value, channel) {
     cc.send();
 }
 
+function send_note(pitch, velocity , channel) {
+    Trace("Send Note " + pitch + " " + velocity);
+    let on = new NoteOn;
+    on.pitch = pitch;
+    on.velocity = velocity;
+    on.channel = channel;
+    on.send();
+    let off = new NoteOff(on);
+    off.sendAfterBeats(1);
+}
+
 function HandleMIDI(event) {
     // if(DEBUG) event.trace();
     if (event instanceof ControlChange && event.number == 88) {
         // if(DEBUG) event.trace();
         if (event.value  <= 10  ) {
             console.log("1 Change instrument channel " + (event.value + 1)) ;
-            //send_cc(123, 0, instrument_channel); // all notes off
-            // allNotesOff();	
             instrument_change_beatpos = event.beatPos;
             instrument_channel = event.value + 1;
             console.log("2 Change instrument channel " + instrument_channel + " at beat " + instrument_change_beatpos);
+            send_note(25, 0); //ks for tremolo articulation
         }
     } else if (event instanceof NoteOff) {
         // NoteOff to omni to avoid stuck notes
