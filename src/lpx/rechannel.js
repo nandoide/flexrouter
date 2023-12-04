@@ -54,11 +54,9 @@ function HandleMIDI(event) {
         }
     } else if (event instanceof NoteOff) {
         for (i = 0; i < activeNotes.length; i++) {
-            // if there is an active note on the same pitch and distinct channel, I need to send a note off with the stored channel
+            // if there is an active note on the same pitch we need to modify the noteoff with the stored channel
             if (activeNotes[i].pitch == event.pitch) {
-                if (event.channel != activeNotes[i].channel) {
-                    event.channel = activeNotes[i].channel;
-                }
+                event.channel = activeNotes[i].channel;
                 activeNotes.splice(i, 1);
                 break;
             }
