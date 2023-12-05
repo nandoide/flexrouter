@@ -1,11 +1,31 @@
 const DEBUG = true;
 var NeedsTimingInfo = true;
 const DIVISI_CHANNEL_START = 2;
-const DIVISI_CHANNEL_MONO = 8;
+const SOLOIST_CHANNEL_START = 10;
+const DEFAULT_DIVISI_CHANNELS = 4;
 const LAPSE = 0.05;
+const PluginParameters =
+    [
+        {
+            name: "Number of divisi channels", type: "linear",
+            minValue: 1, maxValue: 8, numberOfSteps: 1, defaultValue: DEFAULT_DIVISI_CHANNELS
+        }
+    ];
+let divisi_channels = DEFAULT_DIVISI_CHANNELS;
 let lastTime = new Date().getTime();
 let lastTime_idle = null;
 let wasPlaying = false;
+let soloist_channel = SOLOIST_CHANNEL_START;
+
+function ParameterChanged(param, value) {
+    switch (param) {
+        case 0:
+            divisi_channels = value;
+            break;
+        default:
+            Trace('Parameter not defined');
+    }
+}
 
 const console = {
     maxFlush: 20,
@@ -39,12 +59,13 @@ const activeNotes = {
         divisi_notes.sort(this.sortByPitchAscending);
         if (divisi_notes.length > 2) {
             for (let i = 0; i < divisi_notes.length; i++) {
-                divisi_notes[i].channel = i + DIVISI_CHANNEL_START;
+                divisi_notes[i].channel = i  + DIVISI_CHANNEL_START;
             }
         } else if (divisi_notes.length == 1) {
-            divisi_notes[0].channel = DIVISI_CHANNEL_MONO;
+            divisi_notes[0].channel = soloist_channel;
         } else if (divisi_notes.length == 2) {
-            divisi_notes[0].channel = DIVISI_CHANNEL_MONO;
+            divisi_notes[0].channel = soloist_channel;
+            divisi_notes[1].channel = soloist_channel;
         }
         // if (divisi_notes.length > 0) console.log(JSON.stringify(divisi_notes));
         // substitute divisi_notes in b
@@ -97,7 +118,7 @@ const activeNotes = {
         }
     },
     noteoff: function () {
-        for(let i = 0; i < this.sended.length; i++) {
+        for (let i = 0; i < this.sended.length; i++) {
             let off = new NoteOff(this.sended[i]);
             off.send();
         }
@@ -115,13 +136,13 @@ function Idle() {
 
 function ProcessMIDI() {
     // Get timing information from the host application
-	let musicInfo = GetTimingInfo();
+    let musicInfo = GetTimingInfo();
 
-	// clear activeNotes[] when the transport stops and send any remaining note off events
-	if (wasPlaying && !musicInfo.playing) {
-		activeNotes.noteoff();
-	}
-	wasPlaying = musicInfo.playing;
+    // clear activeNotes[] when the transport stops and send any remaining note off events
+    if (wasPlaying && !musicInfo.playing) {
+        activeNotes.noteoff();
+    }
+    wasPlaying = musicInfo.playing;
     const now = new Date().getTime();
     // let lapse_from_last_execution = now - lastTime;
     activeNotes.divisi();
@@ -141,7 +162,13 @@ function HandleMIDI(event) {
             }
         }
         event.send();
+    } else if (event instanceof ControlChange && event.number == 88) {
+        if (SOLOIST_CHANNEL_START + event.value <= 16) {
+            soloist_channel = SOLOIST_CHANNEL_START + event.value;
+            if (DEBUG) console.log("Change soloist instrument channel to " + soloist_channel);
+        }
     } else {
         event.send();
     }
 }
+
