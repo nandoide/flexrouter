@@ -7,11 +7,11 @@ const LAPSE = 0.05;
 const divisi_articulations = [71, 72, 73, 74, 75, 76, 77, 78];
 const soloist_articulation = 70;
 let articulations = divisi_articulations + [soloist_articulation];
-const PluginParameters =
+var PluginParameters =
     [
         {
             name: "Number of divisi channels", type: "linear",
-            minValue: 1, maxValue: 8, numberOfSteps: 1, defaultValue: DEFAULT_DIVISI_CHANNELS
+            minValue: 0, maxValue: 8, numberOfSteps: 8, defaultValue: DEFAULT_DIVISI_CHANNELS
         }
     ];
 let divisi_channels = DEFAULT_DIVISI_CHANNELS;
@@ -54,14 +54,18 @@ const activeNotes = {
     rechannel: function (divisi_notes) {
         // sort divisi_notes by pitch ascending
         divisi_notes.sort(this.sortByPitchAscending);
-        channel_pattern = [];
-        for (let i = 0; i < divisi_notes.length; i++) {
-            channel_pattern.push(i % divisi_channels);
+        let channel_pattern = [];
+        if (divisi_channels == 0) {
+            channel_pattern = Array(divisi_notes.length).fill(soloist_channel);
+        } else {
+            for (let i = 0; i < divisi_notes.length; i++) {
+                channel_pattern.push(i % divisi_channels + DIVISI_CHANNEL_START);
+            }
+            channel_pattern.sort();
         }
-        channel_pattern.sort();
         if (divisi_notes.length > 2) {
             for (let i = 0; i < divisi_notes.length; i++) {
-                divisi_notes[i].channel = channel_pattern[i]  + DIVISI_CHANNEL_START;
+                divisi_notes[i].channel = channel_pattern[i];
             }
         } else if (divisi_notes.length == 1) {
             divisi_notes[0].channel = soloist_channel;
@@ -189,4 +193,3 @@ function HandleMIDI(event) {
         event.send();
     }
 }
-
