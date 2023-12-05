@@ -18,7 +18,7 @@ let octave = 0; // octave index in octaves
 const modulations4pad = [0, 32, 54]; //first three modulation of the logic onscreen midi keyboard
 const modulations4perform = [76, 98, 127];//second three modulations of the logic onscreen midi keyboard
 
-const instrument = 8;
+const instrument = 9;
 const cc_instrument = 88;
 
 const articulation = 0;

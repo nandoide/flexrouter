@@ -4,6 +4,9 @@ const DIVISI_CHANNEL_START = 2;
 const SOLOIST_CHANNEL_START = 10;
 const DEFAULT_DIVISI_CHANNELS = 4;
 const LAPSE = 0.05;
+const divisi_articulations = [71, 72, 73, 74, 75, 76, 77, 78];
+const soloist_articulation = 70;
+let articulations = divisi_articulations + [soloist_articulation];
 const PluginParameters =
     [
         {
@@ -46,20 +49,19 @@ const activeNotes = {
     sended: [],
     add: function (event) { this.b.push(event) },
     sortByPitchAscending: function (a, b) {
-        if (a.pitch < b.pitch) {
-            return -1;
-        }
-        if (a.pitch > b.pitch) {
-            return 1;
-        }
-        return 0;
+        return a.pitch - b.pitch;
     },
     rechannel: function (divisi_notes) {
         // sort divisi_notes by pitch ascending
         divisi_notes.sort(this.sortByPitchAscending);
+        channel_pattern = [];
+        for (let i = 0; i < divisi_notes.length; i++) {
+            channel_pattern.push(i % divisi_channels);
+        }
+        channel_pattern.sort();
         if (divisi_notes.length > 2) {
             for (let i = 0; i < divisi_notes.length; i++) {
-                divisi_notes[i].channel = i  + DIVISI_CHANNEL_START;
+                divisi_notes[i].channel = channel_pattern[i]  + DIVISI_CHANNEL_START;
             }
         } else if (divisi_notes.length == 1) {
             divisi_notes[0].channel = soloist_channel;
@@ -138,7 +140,7 @@ function ProcessMIDI() {
     // Get timing information from the host application
     let musicInfo = GetTimingInfo();
 
-    // clear activeNotes[] when the transport stops and send any remaining note off events
+    // stops and send any remaining note off events
     if (wasPlaying && !musicInfo.playing) {
         activeNotes.noteoff();
     }
@@ -148,6 +150,20 @@ function ProcessMIDI() {
     activeNotes.divisi();
     activeNotes.send();
     // lastTime = now;
+}
+
+function articulations_rechannel(event) {
+    if (event instanceof ControlChange && divisi_articulations.includes(event.number)) {
+        if (DEBUG) console.log("Articulation " + event.value);
+        let new_channel = divisi_articulations.indexOf(event.number) + DIVISI_CHANNEL_START;
+        let new_cc = soloist_articulation;
+        event.channel = new_channel;
+        event.number = new_cc;
+    } else if (event instanceof ControlChange && event.number == soloist_articulation) {
+        if (DEBUG) console.log("Articulation " + event.value);
+        event.channel = soloist_channel;
+    }
+    event.send();
 }
 
 function HandleMIDI(event) {
@@ -167,6 +183,8 @@ function HandleMIDI(event) {
             soloist_channel = SOLOIST_CHANNEL_START + event.value;
             if (DEBUG) console.log("Change soloist instrument channel to " + soloist_channel);
         }
+    } else if (event instanceof ControlChange && articulations.includes(event.number)) {
+        articulations_rechannel(event);
     } else {
         event.send();
     }
